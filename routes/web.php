@@ -7,8 +7,11 @@ use App\Http\Controllers\CartController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-
 Route::get('/', function () {
+    
+    if (Auth::check()) {
+        return Inertia::render('Dashboard');
+    }
     return Inertia::render('Welcome', [
         'canLogin' => Route::has('login'),
         'canRegister' => Route::has('register'),
@@ -32,17 +35,28 @@ Route::middleware('auth')->group(function () {
     Route::get('/transactions/{id}', [TransactionController::class, 'show']);
 
 
-    Route::get('/cart/count', [CartController::class, 'countCart']);
+     Route::get('/cart', fn () => Inertia::render('Cart'))
+        ->name('cart');
+
+     Route::post('/logout', [AuthenticationController::class, 'logout'])
+        ->middleware('auth')
+        ->name('logout');
+
+     /* ================= CHECKOUT ================= */
+    Route::post('/checkout', [CheckoutController::class, 'store'])
+        ->name('checkout.store');
+
+    // TRANSACTION
+    Route::get('/transactions', [TransactionController::class, 'index'])->name('transactions.index');
+    Route::get('/transactions/{transaction}', [TransactionController::class, 'show'])->name('transactions.show');
+
+
+
     
-    Route::get('/cart', [CartController::class, 'index'])->name('cart.index');
-    Route::post('/cart', [CartController::class, 'store']);
-    Route::patch('/cart/{cart}', [CartController::class, 'update']);
-    Route::delete('/cart/{cart}', [CartController::class, 'destroy']);
 });
 
 // Authentication routes
 Route::post('/login', [AuthenticationController::class, 'login']);
-Route::post('/logout', [AuthenticationController::class, 'logout']);
 Route::post('/register', [AuthenticationController::class, 'register']);
 
 require __DIR__.'/auth.php';

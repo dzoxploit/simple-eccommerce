@@ -24,13 +24,13 @@ class AuthenticationController extends Controller
     public function logout(Request $request)
     {
         Auth::logout();
+
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return response()->json(['message' => 'Logout successful'], 200);
+        return redirect()->route('login');
     }
-
-    // Handle user registration
+        // Handle user registration
     public function register(Request $request)
     {
         $validated = $request->validate([

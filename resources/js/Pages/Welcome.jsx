@@ -16,7 +16,7 @@ export default function Welcome() {
 
     const addToCart = async (productId) => {
         try {
-            await axios.post("/cart", {
+            await axios.post("/api/cart", {
                 product_id: productId,
                 quantity: 1,
             });

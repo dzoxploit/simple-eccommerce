@@ -27,12 +27,27 @@ class CartController extends Controller
             'quantity' => 'required|integer|min:1',
         ]);
 
-        $cartItem = Cart::updateOrCreate(
-            ['user_id' => Auth::id(), 'product_id' => $validated['product_id']],
-            ['quantity' => $validated['quantity']]
-        );
+        $cartItem = Cart::where('user_id', auth()->id())
+            ->where('product_id', $validated['product_id'])
+            ->first();
 
-        return response()->json(['message' => 'Item added to cart', 'cartItem' => $cartItem]);
+        if ($cartItem) {
+            // TAMBAH quantity
+            $cartItem->increment('quantity', $validated['quantity']);
+        } else {
+            // BARU
+            $cartItem = Cart::create([
+                'user_id' => auth()->id(),
+                'product_id' => $validated['product_id'],
+                'quantity' => $validated['quantity'],
+                'status_cart' => true, 
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Item added to cart',
+            'data' => $cartItem->fresh()
+        ]);
     }
 
     public function destroy($id)

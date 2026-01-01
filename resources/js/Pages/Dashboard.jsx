@@ -16,6 +16,7 @@ export default function Welcome() {
     // toast
     const [toast, setToast] = useState("");
 
+    /* ================= FETCH PRODUCTS ================= */
     useEffect(() => {
         axios
             .get("/api/products")
@@ -23,7 +24,7 @@ export default function Welcome() {
             .finally(() => setLoading(false));
     }, []);
 
-    // fetch cart count
+    /* ================= FETCH CART COUNT ================= */
     useEffect(() => {
         if (!auth.user) return;
 
@@ -33,7 +34,7 @@ export default function Welcome() {
             .catch(() => {});
     }, [auth.user]);
 
-    // close dropdown
+    /* ================= CLOSE DROPDOWN ================= */
     useEffect(() => {
         const handler = (e) => {
             if (
@@ -47,14 +48,16 @@ export default function Welcome() {
         return () => document.removeEventListener("mousedown", handler);
     }, []);
 
+    /* ================= TOAST ================= */
     const showToast = (message) => {
         setToast(message);
         setTimeout(() => setToast(""), 2000);
     };
 
+    /* ================= ADD TO CART ================= */
     const addToCart = async (productId) => {
         try {
-            await axios.post("/cart", {
+            await axios.post("/api/cart", {
                 product_id: productId,
                 quantity: 1,
             });
@@ -68,6 +71,16 @@ export default function Welcome() {
         }
     };
 
+    /* ================= LOGOUT ================= */
+    const handleLogout = () => {
+        router.post(
+            "/logout",
+            {},
+            {
+                replace: true,
+            }
+        );
+    };
     return (
         <>
             <Head title="SimpleStore" />
@@ -125,14 +138,12 @@ export default function Welcome() {
                                             >
                                                 Cart
                                             </Link>
-                                            <form
-                                                method="POST"
-                                                action="/logout"
+                                            <button
+                                                onClick={handleLogout}
+                                                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                                             >
-                                                <button className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
-                                                    Logout
-                                                </button>
-                                            </form>
+                                                Logout
+                                            </button>
                                         </div>
                                     )}
                                 </div>
@@ -167,14 +178,14 @@ export default function Welcome() {
                             {products.map((product) => (
                                 <div
                                     key={product.id}
-                                    className="bg-white rounded shadow hover:shadow-md overflow-hidden"
+                                    className="bg-white rounded shadow"
                                 >
                                     <img
                                         src={`https://picsum.photos/seed/${product.id}/300/200`}
                                         className="h-28 w-full object-cover"
                                     />
                                     <div className="p-3">
-                                        <h3 className="text-sm font-medium line-clamp-2">
+                                        <h3 className="text-sm font-medium">
                                             {product.name}
                                         </h3>
                                         <p className="text-sm font-semibold mb-2">
@@ -184,7 +195,7 @@ export default function Welcome() {
                                             onClick={() =>
                                                 addToCart(product.id)
                                             }
-                                            className="w-full text-xs py-1.5 bg-black text-white rounded hover:bg-gray-800"
+                                            className="w-full text-xs py-1.5 bg-black text-white rounded"
                                         >
                                             Add to Cart
                                         </button>
@@ -197,7 +208,7 @@ export default function Welcome() {
 
                 {/* TOAST */}
                 {toast && (
-                    <div className="fixed bottom-6 right-6 bg-black text-white px-4 py-2 rounded shadow-lg text-sm">
+                    <div className="fixed bottom-6 right-6 bg-black text-white px-4 py-2 rounded text-sm">
                         {toast}
                     </div>
                 )}

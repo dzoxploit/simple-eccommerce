@@ -2,43 +2,122 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\Cart;
 use App\Models\Transaction;
+use App\Models\TransactionItem;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\TransactionDetails;
 
 class TransactionController extends Controller
 {
-    // Create a new transaction
+    public function __construct()
+    {
+        // WAJIB LOGIN
+        $this->middleware('auth');
+    }
+
+    /**
+     * Checkout cart → create transaction
+     */
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'product_id' => 'required|exists:products,id',
-            'quantity' => 'required|integer|min:1',
-        ]);
+        $user = Auth::user();
 
-        $transaction = Transaction::create([
-            'user_id' => Auth::id(),
-            'product_id' => $validated['product_id'],
-            'quantity' => $validated['quantity'],
-            'total_price' => $validated['quantity'] * $request->input('price'),
-        ]);
+        // Ambil semua cart user
+        $carts = Cart::with('product')
+            ->where('user_id', $user->id)
+            ->get();
 
-        return response()->json(['message' => 'Transaction successful', 'transaction' => $transaction], 201);
+        if ($carts->isEmpty()) {
+            return response()->json([
+                'message' => 'Cart is empty'
+            ], 422);
+        }
+
+        DB::beginTransaction();
+
+        try {
+            // Hitung total
+            $total = 0;
+            foreach ($carts as $cart) {
+                $total += $cart->product->price * $cart->quantity;
+            }
+
+            // Create transaction
+            $transaction = Transaction::create([
+                'user_id' => $user->id,
+                'total'   => $total,
+                'status'  => 'PAID', // bisa PENDING kalau pakai payment gateway
+            ]);
+
+            // Simpan items
+            foreach ($carts as $cart) {
+                TransactionItem::create([
+                    'transaction_id' => $transaction->id,
+                    'product_id'     => $cart->product_id,
+                    'quantity'       => $cart->quantity,
+                    'price'          => $cart->product->price,
+                ]);
+            }
+
+            // Update cart setelah checkout
+            Cart::where('user_id', $user->id)
+                ->where('status', true)
+                ->update(['status' => false]);
+
+            DB::commit();
+
+            // Load relasi untuk email
+            $transaction->load(['items.product', 'user']);
+
+            // Kirim email
+            Mail::to($user->email)
+                ->send(new TransactionDetails($transaction));
+
+            // ✅ REDIRECT KE TRANSACTION LIST
+            return redirect()
+                ->route('transactions.index')
+                ->with('success', 'Checkout success');
+
+        } catch (\Throwable $e) {
+            DB::rollBack();
+
+            return redirect()
+                ->route('transactions.index')
+                ->with('error', 'Checkout failed', $e->getMessage());
+        }
     }
 
-    // View transaction details
+    /**
+     * Detail transaksi (AUTH USER ONLY)
+     */
     public function show($id)
     {
-        $transaction = Transaction::where('id', $id)->where('user_id', Auth::id())->firstOrFail();
+        $transaction = Transaction::with(['items.product'])
+            ->where('id', $id)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
-        return response()->json($transaction);
+        return Inertia::render('Transactions/Show', [
+            'transaction' => $transaction,
+        ]);
     }
 
-    // List transaction history for a user
+    /**
+     * History transaksi user
+     */
     public function index()
     {
-        $transactions = Transaction::where('user_id', Auth::id())->get();
+        $transactions = Transaction::with('items.product')
+            ->where('user_id', Auth::id())
+            ->latest()
+            ->get();
 
-        return response()->json($transactions);
+        return Inertia::render('Transactions/Index', [
+            'transactions' => $transactions,
+        ]);
     }
 }
