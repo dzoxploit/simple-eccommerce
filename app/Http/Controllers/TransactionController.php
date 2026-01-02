@@ -27,34 +27,38 @@ class TransactionController extends Controller
     {
         $user = Auth::user();
 
-        // Ambil semua cart user
         $carts = Cart::with('product')
             ->where('user_id', $user->id)
+            ->where('status', true)
             ->get();
 
         if ($carts->isEmpty()) {
-            return response()->json([
-                'message' => 'Cart is empty'
-            ], 422);
+            return back()->with('error', 'Cart is empty');
         }
 
         DB::beginTransaction();
 
         try {
-            // Hitung total
-            $total = 0;
+            // ✅ VALIDASI STOCK
             foreach ($carts as $cart) {
-                $total += $cart->product->price * $cart->quantity;
+                if ($cart->product->stock < $cart->quantity) {
+                    throw new \Exception("Stock for {$cart->product->name} is not enough");
+                }
             }
+
+            // Hitung total
+            $total = $carts->sum(fn ($cart) =>
+                $cart->product->price * $cart->quantity
+            );
 
             // Create transaction
             $transaction = Transaction::create([
                 'user_id' => $user->id,
                 'total'   => $total,
-                'status'  => 'PAID', // bisa PENDING kalau pakai payment gateway
+                'status'  => 'PAID',
             ]);
 
-            // Simpan items
+            // Simpan items + update stock
             foreach ($carts as $cart) {
                 TransactionItem::create([
                     'transaction_id' => $transaction->id,
@@ -62,9 +66,17 @@ class TransactionController extends Controller
                     'quantity'       => $cart->quantity,
                     'price'          => $cart->product->price,
                 ]);
+
+                // ⬇️ UPDATE STOCK
+                $cart->product->decrement('stock', $cart->quantity);
+
+                // 🚨 LOW STOCK CHECK
+                if ($cart->product->stock <= 5) {
+                    NotifyLowStock::dispatch($cart->product);
+                }
             }
 
-            // Update cart setelah checkout
+            // Update cart status
             Cart::where('user_id', $user->id)
                 ->where('status', true)
                 ->update(['status' => false]);
@@ -74,11 +86,10 @@ class TransactionController extends Controller
             // Load relasi untuk email
             $transaction->load(['items.product', 'user']);
 
-            // Kirim email
+            // Kirim email transaksi
             Mail::to($user->email)
                 ->send(new TransactionDetails($transaction));
 
-            // ✅ REDIRECT KE TRANSACTION LIST
             return redirect()
                 ->route('transactions.index')
                 ->with('success', 'Checkout success');
@@ -86,9 +97,7 @@ class TransactionController extends Controller
         } catch (\Throwable $e) {
             DB::rollBack();
 
-            return redirect()
-                ->route('transactions.index')
-                ->with('error', 'Checkout failed', $e->getMessage());
+            return back()->with('error', $e->getMessage());
         }
     }
 

@@ -2,31 +2,33 @@
 
 namespace App\Jobs;
 
+use App\Models\Product;
+use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Mail;
 
 class NotifyLowStock implements ShouldQueue
 {
-    use Queueable;
+    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
-    protected $product;
+    public Product $product;
 
-    /**
-     * Create a new job instance.
-     */
-    public function __construct($product)
+    public function __construct(Product $product)
     {
         $this->product = $product;
     }
 
-    /**
-     * Execute the job.
-     */
     public function handle(): void
     {
-        \Mail::raw("The product '{$this->product->name}' is running low on stock.", function ($message) {
-            $message->to('admin@example.com')
-                    ->subject('Low Stock Alert');
-        });
+        Mail::raw(
+            "⚠️ Product '{$this->product->name}' is running low.\nRemaining stock: {$this->product->stock}",
+            function ($message) {
+                $message->to(config('mail.admin_email', 'admin@example.com'))
+                        ->subject('Low Stock Alert');
+            }
+        );
     }
 }
